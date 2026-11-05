@@ -7,8 +7,6 @@
 
 <p align="center"><b>FPV drone simulator</b> · open beta</p>
 
-<p align="center"><img src="docs/images/model.png" alt="Mayhem X5" width="720"></p>
-
 ## FPVjoy Installation
 
 1. Download the `gmcl_fpvjoy_win64.dll` from the release.
