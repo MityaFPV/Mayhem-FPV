@@ -1,0 +1,20 @@
+"mayhemfpv"
+{
+	"base"			"base"
+	"title"			"Mayhem FPV"
+	"maps"			""
+	"category"		"other"
+	"menusystem"	"1"
+
+	"settings"
+	{
+		1
+		{
+			"name"		"mayhem_noclip"
+			"text"		"Allow noclip on foot"
+			"help"		"Lets pilots noclip (V) to walk to a good launch spot"
+			"type"		"CheckBox"
+			"default"	"1"
+		}
+	}
+}

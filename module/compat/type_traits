@@ -1,0 +1,5 @@
+#pragma once
+namespace std {
+template <class T> struct alignment_of { static constexpr unsigned long long value = alignof(T); };
+template <class T> struct is_trivially_destructible { static constexpr bool value = __is_trivially_destructible(T); };
+}

@@ -1,0 +1,6 @@
+{
+    "title": "Mayhem FPV",
+    "type": "gamemode",
+    "tags": [ "fun", "realism" ],
+    "ignore": [ "*.md" ]
+}
