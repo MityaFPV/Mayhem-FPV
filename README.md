@@ -9,7 +9,7 @@
 
 ## FPVjoy Installation
 
-1. Download the `gmcl_fpvjoy_win64.dll` from the release.
+1. Download the `gmcl_fpvjoy_win64.dll` from the releases.
 2. In Steam: Garry's Mod > Manage > Browse local files.
 3. Put the module to `\garrysmod\lua\bin`
 
