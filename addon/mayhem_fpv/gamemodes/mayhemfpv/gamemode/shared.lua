@@ -1,5 +1,5 @@
 GM.Name = "Mayhem FPV"
-GM.Author = "MityaFPV & Claude (Anthropic)"
+GM.Author = "MityaFPV & Claude"
 GM.Email = ""
 GM.Website = ""
 GM.TeamBased = false
@@ -8,9 +8,9 @@ DeriveGamemode("base")
 
 MayhemFPV = MayhemFPV or {}
 local FPV = MayhemFPV
-FPV.Version = "0.7.0"
+FPV.Version = "0.7.1"
 
-FPV.MODULE_URL = ""
+FPV.MODULE_URL = "https://github.com/MityaFPV/Mayhem-FPV/releases/latest"
 FPV.Gamemode = true
 
 FPV.DEFAULT_SCALE = 0.0254

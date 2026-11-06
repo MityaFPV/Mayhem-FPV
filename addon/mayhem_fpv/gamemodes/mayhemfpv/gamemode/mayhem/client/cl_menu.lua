@@ -262,7 +262,7 @@ function M.BuildRadio(parent)
     if FPV.Input.moduleLoaded then
         modLbl:SetText("fpvjoy module loaded")
     else
-        modLbl:SetText("Radio module not installed: keyboard only")
+        modLbl:SetText("Radio module not installed: gamepad or keyboard")
     end
 
     local r2 = row(root)
@@ -287,11 +287,10 @@ function M.BuildRadio(parent)
         local url = FPV.MODULE_URL or ""
         local b = button(mr, "Get the radio module", function() if url ~= "" then gui.OpenURL(url) end end, 200)
         b:SetEnabled(url ~= "")
-        local ml = vgui.Create("DLabel", mr)
-        ml:SetFont("MayhemUISmall")
-        ml:SetTextColor(SK.C.dim)
-        ml:SetText("Needed for radios and gamepads. Put gmcl_fpvjoy_win64.dll in garrysmod/lua/bin and restart.")
-        ml:Dock(FILL)
+    end
+    if FPV.Input.padNeedsRestart then
+        local w = note(root, "Restart Garry's Mod once so it can find your gamepad.")
+        w:SetTextColor(BAD)
     end
 
     buildLive(root)
@@ -1192,7 +1191,7 @@ function M.BuildAbout(parent)
         end
     end
     credit("MityaFPV", "Code, design, menu, MayhemPhys, models")
-    credit("Claude (Anthropic)", "Code helper, troubleshooting, fpvjoy module, radio controller, rates and Betaflight firmware connection")
+    credit("Claude", "Code helper, troubleshooting, fpvjoy module, radio controller, rates and Betaflight firmware connection")
 
     header(root, "Thanks")
     note(root, "Open-source Betaflight firmware")

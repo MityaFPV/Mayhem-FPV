@@ -166,8 +166,41 @@ In.GAMEPADS = {
     },
 }
 
+In.GAMEPADS_GMOD = {
+    xbox = {
+        yaw = { axis = 1, inv = false }, roll = { axis = 5, inv = false }, pitch = { axis = 4, inv = true },
+        stickThr = { axis = 2, inv = true }, trigThr = { axis = 3, inv = true, mode = "up" },
+        arm = 1, turtle = 2, cam = 4, reset = 7,
+    },
+}
+In.GAMEPADS_GMOD.playstation = In.GAMEPADS_GMOD.xbox
+
+local gmodPadOn = false
+function In.EnableGamepad()
+    if gmodPadOn then return end
+    gmodPadOn = true
+    local cv = GetConVar("joystick")
+    In.padNeedsRestart = cv ~= nil and cv:GetString() == "0"
+    RunConsoleCommand("joystick", "1")
+end
+
+local GMOD_AXES = { "ANALOG_JOY_X", "ANALOG_JOY_Y", "ANALOG_JOY_Z", "ANALOG_JOY_R", "ANALOG_JOY_U", "ANALOG_JOY_V" }
+local function readGamepad(st)
+    local raw = st.raw
+    for i = 1, NAXES do
+        local code = GMOD_AXES[i] and _G[GMOD_AXES[i]]
+        raw[i] = code and clamp((input.GetAnalogValue(code) or 0) / 32767, -1, 1) or 0
+    end
+    local b = 0
+    for i = 0, 15 do
+        if input.IsButtonDown((JOYSTICK_FIRST_BUTTON or 114) + i) then b = bit.bor(b, bit.lshift(1, i)) end
+    end
+    st.buttons, st.buttonsHi = b, 0
+end
+
 function In.ApplyGamepad(ic, layout, throttle)
-    local L = In.GAMEPADS[layout] or In.GAMEPADS.xbox
+    local set = In.LoadModule() and In.GAMEPADS or In.GAMEPADS_GMOD
+    local L = set[layout] or set.xbox
     local gp = ic.gamepad
     gp.enabled, gp.layout = true, layout
     ic.map.yaw = { axis = L.yaw.axis, inv = L.yaw.inv }
@@ -254,7 +287,13 @@ function In.Poll(dt)
     local st = In.state
     local backend = cfg.backend
     if backend ~= "keyboard" then
-        backend = In.LoadModule() and "fpvjoy" or "keyboard"
+        if In.LoadModule() then
+            backend = "fpvjoy"
+        elseif cfg.gamepad and cfg.gamepad.enabled then
+            backend = "gamepad"
+        else
+            backend = "keyboard"
+        end
     end
     st.backend = backend
 
@@ -265,7 +304,11 @@ function In.Poll(dt)
 
     local raw = st.raw
     st.path = (backend == "fpvjoy") and (In.hid and "hid" or "winmm") or backend
-    if backend == "fpvjoy" then
+    if backend == "gamepad" then
+        In.EnableGamepad()
+        readGamepad(st)
+        st.ok = true
+    elseif backend == "fpvjoy" then
         local now = SysTime()
         local id = In.ActiveDevice()
         if id == nil then

@@ -462,6 +462,24 @@ do
     FPV.Config.data.input.backend = "fpvjoy"
     st = In.Poll(1 / 60)
     check("no module, old 'radio module' setting: keyboard", st.backend == "keyboard", st.backend)
+    local ic = FPV.Config.data.input
+    In.ApplyGamepad(ic, "xbox", "up")
+    M.analog[ANALOG_JOY_Y] = -32767
+    M.analog[ANALOG_JOY_U] = 32767
+    M.analog[ANALOG_JOY_R] = -16000
+    st = In.Poll(1 / 60)
+    check("no module: gamepad through GMod", st.backend == "gamepad" and st.ok and st.thr > 0.99 and st.roll > 0.99 and st.pitch > 0.1,
+        string.format("%s thr %.2f roll %.2f pitch %.2f", st.backend, st.thr, st.roll, st.pitch))
+    check("no module: GMod joystick switched on, restart hint", M.cvars.joystick == "1" and In.padNeedsRestart == true, "")
+    M.buttons[JOYSTICK_FIRST_BUTTON] = true
+    st = In.Poll(1 / 60)
+    M.buttons[JOYSTICK_FIRST_BUTTON] = nil
+    st = In.Poll(1 / 60)
+    check("no module: A arms (toggle)", st.arm == true, tostring(st.arm))
+    ic.gamepad.enabled = false
+    st = In.Poll(1 / 60)
+    check("no module, gamepad off: keyboard (no RC radio path)", st.backend == "keyboard", st.backend)
+    M.analog, M.buttons = {}, {}
     FPV.Config.data = FPV.Config.Defaults()
 end
 
