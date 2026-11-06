@@ -16,7 +16,7 @@
 ## Credits
 
 - **MityaFPV**: code, design, menu, MayhemPhys, models, everything.
-- **Claude**: code helper, troubleshooting, fpvjoy module, radio controller, rates and Betaflight firmware connection. (Yep, half-vibecoded addon)
+- **Claude**: code helper, troubleshooting, fpvjoy module, radio controller, rates and Betaflight firmware connection. (Yes, half-vibecoded addon)
 
 Thanks to the open-source [Betaflight](https://github.com/betaflight/betaflight) firmware.
 
