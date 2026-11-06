@@ -386,6 +386,9 @@ do
     check("HID module detected", In.hid == true and #In.devices == 2, tostring(#In.devices))
     local st = In.Poll(1 / 60)
     check("auto-picks the EdgeTX radio over a gamepad", st.ok and st.deviceId == 1 and st.path == "hid", tostring(st.deviceId))
+    FPV.Config.data.input.backend = "gamepad"
+    check("Gamepad input source picks the gamepad, not the radio", In.ActiveDevice() == 0, tostring(In.ActiveDevice()))
+    FPV.Config.data.input.backend = "auto"
     FPV.Config.data.input.deviceKey = In.devices[1].key
     st = In.Poll(1 / 60)
     check("device chosen by key", st.deviceId == 0, tostring(st.deviceId))
@@ -468,7 +471,7 @@ do
     M.analog[ANALOG_JOY_U] = 32767
     M.analog[ANALOG_JOY_R] = -16000
     st = In.Poll(1 / 60)
-    check("no module: gamepad through GMod", st.backend == "gamepad" and st.ok and st.thr > 0.99 and st.roll > 0.99 and st.pitch > 0.1,
+    check("no module: gamepad through GMod", ic.backend == "gamepad" and st.backend == "gamepad" and st.ok and st.thr > 0.99 and st.roll > 0.99 and st.pitch > 0.1,
         string.format("%s thr %.2f roll %.2f pitch %.2f", st.backend, st.thr, st.roll, st.pitch))
     check("no module: GMod joystick switched on, restart hint", M.cvars.joystick == "1" and In.padNeedsRestart == true, "")
     M.buttons[JOYSTICK_FIRST_BUTTON] = true
@@ -476,9 +479,14 @@ do
     M.buttons[JOYSTICK_FIRST_BUTTON] = nil
     st = In.Poll(1 / 60)
     check("no module: A arms (toggle)", st.arm == true, tostring(st.arm))
-    ic.gamepad.enabled = false
+    ic.backend = "auto"
     st = In.Poll(1 / 60)
-    check("no module, gamepad off: keyboard (no RC radio path)", st.backend == "keyboard", st.backend)
+    check("no module, RC radio selected: no radio read (keyboard)", st.backend == "keyboard", st.backend)
+    local legacy = FPV.Config.Defaults().input
+    legacy.gamepad.enabled = true
+    FPV.Config.data.input = legacy
+    st = In.Poll(1 / 60)
+    check("old 'I'm using a gamepad' setting becomes the Gamepad input source", legacy.backend == "gamepad" and st.backend == "gamepad", legacy.backend)
     M.analog, M.buttons = {}, {}
     FPV.Config.data = FPV.Config.Defaults()
 end

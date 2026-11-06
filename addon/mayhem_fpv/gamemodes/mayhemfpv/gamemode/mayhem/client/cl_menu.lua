@@ -218,7 +218,6 @@ for i = 1, 8 do AXIS_CHOICES[i] = { "CH" .. i, i } end
 function M.BuildGamepad(root, ic)
     local gp = ic.gamepad
     header(root, "Gamepad")
-    check(root, "I'm using a gamepad (self-centring sticks)", gp.enabled, function(v) gp.enabled = v end)
     local r1 = row(root)
     rowLabel(r1, "Layout", 140)
     combo(r1, { { "Xbox / XInput", "xbox" }, { "PlayStation", "playstation" } }, gp.layout or "xbox", function(v) gp.layout = v end, 200)
@@ -249,23 +248,28 @@ function M.BuildRadio(parent)
 
     local r1 = row(root)
     rowLabel(r1, "Input source")
+    local src = (ic.backend == "keyboard" or ic.backend == "gamepad") and ic.backend or "auto"
     combo(r1, {
-        { "Radio / gamepad", "auto" },
+        { "RC radio", "auto" },
+        { "Gamepad", "gamepad" },
         { "Keyboard", "keyboard" },
-    }, (ic.backend == "keyboard") and "keyboard" or "auto", function(v)
+    }, src, function(v)
         ic.backend = v
+        FPV.Config.Save()
+        M.Reopen("Radio")
     end, 230)
     local modLbl = vgui.Create("DLabel", r1)
     modLbl:Dock(FILL)
     modLbl:SetDark(true)
     FPV.Input.LoadModule()
     if FPV.Input.moduleLoaded then
-        modLbl:SetText("fpvjoy module loaded")
+        modLbl:SetText("RC module loaded")
     else
-        modLbl:SetText("Radio module not installed: gamepad or keyboard")
+        modLbl:SetText("RC module not installed")
     end
 
     local r2 = row(root)
+    r2:SetVisible(FPV.Input.moduleLoaded and src ~= "keyboard")
     rowLabel(r2, "Device")
     local devCombo = vgui.Create("DComboBox", r2)
     devCombo:SetWide(330)
@@ -282,13 +286,13 @@ function M.BuildRadio(parent)
     devCombo.OnSelect = function(_, _, _, data) ic.deviceKey = data; changed() end
     button(r2, "Refresh", function() FPV.Input.RefreshDevices(); fillDevices() end, 90)
 
-    if not FPV.Input.moduleLoaded then
+    if not FPV.Input.moduleLoaded and src == "auto" then
         local mr = row(root, 30)
         local url = FPV.MODULE_URL or ""
         local b = button(mr, "Get the radio module", function() if url ~= "" then gui.OpenURL(url) end end, 200)
         b:SetEnabled(url ~= "")
     end
-    if FPV.Input.padNeedsRestart then
+    if FPV.Input.padNeedsRestart and src == "gamepad" then
         local w = note(root, "Restart Garry's Mod once so it can find your gamepad.")
         w:SetTextColor(BAD)
     end
@@ -382,7 +386,7 @@ function M.BuildRadio(parent)
     header(root, "Sticks")
     slider(root, "Deadband (roll/pitch/yaw)", 0, 0.2, 3, ic.deadband or 0, function(v) ic.deadband = v end)
 
-    M.BuildGamepad(root, ic)
+    if src == "gamepad" then M.BuildGamepad(root, ic) end
     M.plain = false
     return root
 end

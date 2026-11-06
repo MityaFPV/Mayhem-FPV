@@ -81,13 +81,17 @@ function In.RefreshDevices()
 end
 
 function In.ActiveDevice()
-    local want = FPV.Config.data.input.deviceKey
-    local first, edge
+    local ic = FPV.Config.data.input
+    local want = ic.deviceKey
+    local pad = ic.backend == "gamepad"
+    local first, edge, other
     for _, d in ipairs(In.devices) do
         if want and want ~= "" and d.key == want then return d.id end
         if d.edgetx and not edge then edge = d.id end
+        if not d.edgetx and not other then other = d.id end
         if not first then first = d.id end
     end
+    if pad then return other or first end
     return edge or first
 end
 
@@ -202,7 +206,8 @@ function In.ApplyGamepad(ic, layout, throttle)
     local set = In.LoadModule() and In.GAMEPADS or In.GAMEPADS_GMOD
     local L = set[layout] or set.xbox
     local gp = ic.gamepad
-    gp.enabled, gp.layout = true, layout
+    gp.layout = layout
+    ic.backend = "gamepad"
     ic.map.yaw = { axis = L.yaw.axis, inv = L.yaw.inv }
     ic.map.roll = { axis = L.roll.axis, inv = L.roll.inv }
     ic.map.pitch = { axis = L.pitch.axis, inv = L.pitch.inv }
@@ -285,15 +290,15 @@ end
 function In.Poll(dt)
     local cfg = FPV.Config.data.input
     local st = In.state
+    if cfg.gamepad and cfg.gamepad.enabled and cfg.backend ~= "keyboard" then
+        cfg.backend = "gamepad"
+        cfg.gamepad.enabled = nil
+    end
     local backend = cfg.backend
-    if backend ~= "keyboard" then
-        if In.LoadModule() then
-            backend = "fpvjoy"
-        elseif cfg.gamepad and cfg.gamepad.enabled then
-            backend = "gamepad"
-        else
-            backend = "keyboard"
-        end
+    if backend == "gamepad" then
+        backend = In.LoadModule() and "fpvjoy" or "gamepad"
+    elseif backend ~= "keyboard" then
+        backend = In.LoadModule() and "fpvjoy" or "keyboard"
     end
     st.backend = backend
 
@@ -347,7 +352,7 @@ function In.Poll(dt)
 
     local m = cfg.map
     local gp = cfg.gamepad
-    if gp and gp.enabled then
+    if gp and cfg.backend == "gamepad" then
         local t = stick(cfg, m.thr, true)
         if gp.throttle == "full" then st.thr = (t + 1) * 0.5 else st.thr = math.max(0, t) end
         local e = gp.expo or 0

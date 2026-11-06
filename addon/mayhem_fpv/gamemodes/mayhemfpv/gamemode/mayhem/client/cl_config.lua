@@ -27,7 +27,6 @@ function C.Defaults()
             turtle = { kind = "none", index = 6, inv = false, threshold = 0.3 },
             camSw = { kind = "none", index = 4, inv = false, threshold = 0.3 },
             gamepad = {
-                enabled = false,
                 throttle = "up",
                 expo = 0.35,
                 layout = "xbox",
