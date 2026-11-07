@@ -359,6 +359,124 @@ do
 end
 
 do
+    FPV.Config.data = FPV.Config.Defaults()
+    local ic = FPV.Config.data.input
+    ic.backend = "gamepad"
+    local raw, btn = { 0, 0, 0, 0, 0, 0 }, 0
+    fpvjoy = {
+        Read = function() return true, raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], btn end,
+        Info = function(id) if id == 0 then return true, "Controller", 0x045E, 0x02FF, 6, 16 end return false end,
+        Refresh = function() end,
+        Version = function() return "mock" end,
+    }
+    FPV.Input.moduleLoaded, FPV.Input.hid = true, false
+    FPV.Input.RefreshDevices()
+    allPanels = {}
+    FPV.Menu.OpenWizard()
+    local frame = allPanels[1]
+    local nextBtn
+    for _, p in ipairs(allPanels) do if rawget(p, "DoClick") then nextBtn = p end end
+    local function tick() FPV.Input.Poll(1 / 60); rawget(frame, "Think")(frame) end
+    local seq = {
+        function() raw = { 0, 0, 0, 0, 0, 0 } end,
+        function() for _, v in ipairs({ -0.7, 0.7 }) do raw = { v, v, v, v, 0, 0 }; tick() end raw = { 0, 0, 0, 0, 0, 0 } end,
+        function() raw = { 0, -0.7, 0, 0, 0, 0 } end,
+        function() raw = { 0, 0, 0, 0.7, 0, 0 } end,
+        function() raw = { 0, 0, 0, 0, -0.7, 0 } end,
+        function() raw = { 0.7, 0, 0, 0, 0, 0 } end,
+        function() raw = { 0, 0, 0, 0, 0, 0 }; tick(); btn = 1; tick(); btn = 0 end,
+        function() end,
+    }
+    local ok, e = pcall(function()
+        for _, step in ipairs(seq) do step(); tick(); rawget(nextBtn, "DoClick")(nextBtn) end
+    end)
+    check("wizard: gamepad arm button is a press, not a hold", ok and ic.arm.kind == "button" and ic.arm.index == 1
+        and ic.arm.toggle == true and ic.arm.inv == false,
+        string.format("%s %s %s toggle=%s", tostring(e or ""), ic.arm.kind, tostring(ic.arm.index), tostring(ic.arm.toggle)))
+    local st = FPV.Input.Poll(1 / 60)
+    btn = 1; st = FPV.Input.Poll(1 / 60); btn = 0; st = FPV.Input.Poll(1 / 60)
+    check("wizard: gamepad arms after one press", st.arm == true, tostring(st.arm))
+    raw = { 0, -0.7, 0, 0.7, 0, 0 }
+    st = FPV.Input.Poll(1 / 60)
+    check("wizard: gamepad stick extremes = full", st.thr > 0.99 and st.roll > 0.99, string.format("thr %.2f roll %.2f", st.thr, st.roll))
+    fpvjoy = nil
+    FPV.Input.moduleLoaded = false
+    FPV.Config.data = FPV.Config.Defaults()
+end
+
+do
+    local In = FPV.Input
+    FPV.Config.data = FPV.Config.Defaults()
+    local ic = FPV.Config.data.input
+    In.moduleLoaded, In.moduleTried, In.hid = false, true, false
+    fpvjoy = nil
+    ic.backend = "gamepad"
+    local st = In.Poll(1 / 60)
+    check("pad without module: Garry's Mod path, preset applied on its own", st.backend == "gamepad" and ic.gamepad.path == "gmod"
+        and ic.map.roll.axis == 5 and ic.arm.kind == "button" and ic.arm.toggle == true,
+        string.format("%s path %s roll %s", st.backend, tostring(ic.gamepad.path), tostring(ic.map.roll.axis)))
+
+    local devs = { { "EdgeTX", 0x1209, 0x4F54 } }
+    local ax, btn = { 0, 0, 0, 0, 0, 0, 0, 0 }, 0
+    fpvjoy = {
+        Read = function() return false end,
+        HidScan = function() return #devs end,
+        HidInfo = function(i) local d = devs[i + 1]; if d then return true, d[1], d[2], d[3], 8, 16, 5 end return false end,
+        HidRead = function(i)
+            if devs[i + 1] and devs[i + 1][1] == "EdgeTX" then return true, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1 end
+            return true, btn, 0, 1, ax[1], ax[2], ax[3], ax[4], ax[5], ax[6], ax[7], ax[8]
+        end,
+    }
+    In.moduleLoaded, In.hid = true, true
+    In.RefreshDevices()
+    M.time = M.time + 10
+    st = In.Poll(1 / 60)
+    check("module + only the radio plugged in: Gamepad source does not read the radio", st.backend == "gamepad" and st.padPath == "gmod",
+        string.format("%s %s", st.backend, tostring(st.padPath)))
+
+    devs[2] = { "Wireless Controller", 0x054C, 0x09CC }
+    st = In.Poll(1 / 60)
+    M.time = M.time + 4
+    st = In.Poll(1 / 60)
+    check("module: gamepad plugged in mid-game is picked up, no restart", st.backend == "fpvjoy" and st.padPath == "hid"
+        and st.deviceId == 1 and st.padName == "Wireless Controller", string.format("%s %s %s", st.backend, tostring(st.padPath), tostring(st.deviceId)))
+    check("module: setup switches to the direct-read layout, PlayStation detected", ic.gamepad.path == "hid"
+        and ic.gamepad.layout == "playstation" and ic.map.roll.axis == 3 and ic.map.pitch.axis == 6 and ic.arm.index == 2,
+        string.format("layout %s roll %s pitch %s arm %s", tostring(ic.gamepad.layout), ic.map.roll.axis, ic.map.pitch.axis, tostring(ic.arm.index)))
+    ax[3], ax[6] = 0.71, -0.71
+    st = In.Poll(1 / 60)
+    btn = 2; st = In.Poll(1 / 60); btn = 0; st = In.Poll(1 / 60)
+    check("module: PlayStation pad flies (right stick corner, Cross arms)", st.roll > 0.99 and st.pitch > 0.99 and st.arm == true,
+        string.format("roll %.2f pitch %.2f arm %s", st.roll, st.pitch, tostring(st.arm)))
+    ic.gamepad.thrChoice = "trigger"; ic.gamepad.applied = nil
+    ax = { 0, 0, 0, 0, -1, 0, 0, 0 }
+    st = In.Poll(1 / 60)
+    local t0 = st.thr
+    ax[5] = 1
+    st = In.Poll(1 / 60)
+    check("module: throttle choice re-applies on its own (R2)", t0 == 0 and st.thr > 0.99, string.format("%.2f -> %.2f", t0, st.thr))
+    local xa, xb = { 0, 0, 0, 0, 0, 0, -1, 0 }, 0
+    fpvjoy.XInputRead = function(slot)
+        if slot ~= 0 then return false end
+        return true, xb, 0, 1, xa[1], xa[2], xa[3], xa[4], xa[5], xa[6], xa[7], xa[8]
+    end
+    In.RefreshDevices()
+    ic.gamepad.thrChoice = "up"
+    st = In.Poll(1 / 60)
+    check("module: XInput pad preferred (Xbox / Steam Input), no Garry's Mod dead zone", st.padPath == "xinput"
+        and ic.gamepad.layout == "xbox" and ic.map.roll.axis == 4, string.format("%s %s roll %s", tostring(st.padPath), tostring(ic.gamepad.layout), ic.map.roll.axis))
+    xa[4], xa[5], xa[2] = 0.03, -0.05, -0.04
+    st = In.Poll(1 / 60)
+    check("module: XInput tiny stick movement reaches the quad", math.abs(st.roll - 0.05) < 0.02 and st.pitch > 0.04 and st.thr > 0.03,
+        string.format("roll %.3f pitch %.3f thr %.3f", st.roll, st.pitch, st.thr))
+    xb = 1; st = In.Poll(1 / 60); xb = 0; st = In.Poll(1 / 60)
+    check("module: XInput A arms", st.arm == true, tostring(st.arm))
+    fpvjoy = nil
+    In.moduleLoaded, In.hid = false, false
+    FPV.Config.data = FPV.Config.Defaults()
+end
+
+do
     local In = FPV.Input
     local hraw = { -1, 0, 0, 0, -1, -1, -1, -1 }
     local hbtn = 0
@@ -467,6 +585,9 @@ do
     check("no module, old 'radio module' setting: keyboard", st.backend == "keyboard", st.backend)
     local ic = FPV.Config.data.input
     In.ApplyGamepad(ic, "xbox", "up")
+    In.padSeen = nil
+    st = In.Poll(1 / 60)
+    check("no module: no gamepad data until it moves", st.ok == false and st.path == "gamepad", tostring(st.ok))
     M.analog[ANALOG_JOY_Y] = -32767
     M.analog[ANALOG_JOY_U] = 32767
     M.analog[ANALOG_JOY_R] = -16000
@@ -474,6 +595,23 @@ do
     check("no module: gamepad through GMod", ic.backend == "gamepad" and st.backend == "gamepad" and st.ok and st.thr > 0.99 and st.roll > 0.99 and st.pitch > 0.1,
         string.format("%s thr %.2f roll %.2f pitch %.2f", st.backend, st.thr, st.roll, st.pitch))
     check("no module: GMod joystick switched on, restart hint", M.cvars.joystick == "1" and In.padNeedsRestart == true, "")
+    In.ApplyGamepad(ic, "xbox", "up")
+    M.analog[ANALOG_JOY_Y], M.analog[ANALOG_JOY_U], M.analog[ANALOG_JOY_R] = 0, 0, 0
+    In.Poll(1 / 60)
+    M.analog[ANALOG_JOY_U] = math.floor(0.71 * 32767)
+    M.analog[ANALOG_JOY_R] = -math.floor(0.71 * 32767)
+    M.analog[ANALOG_JOY_X] = math.floor(0.54 * 32767)
+    M.analog[ANALOG_JOY_Y] = -math.floor(0.83 * 32767)
+    st = In.Poll(1 / 60)
+    check("no module: gamepad stick in the corner (round gate) = full on both axes",
+        st.roll > 0.99 and st.pitch > 0.99 and st.yaw > 0.6 and st.thr > 0.99,
+        string.format("roll %.2f pitch %.2f yaw %.2f thr %.2f", st.roll, st.pitch, st.yaw, st.thr))
+    M.analog[ANALOG_JOY_X], M.analog[ANALOG_JOY_Y] = 0, 0
+    M.analog[ANALOG_JOY_U], M.analog[ANALOG_JOY_R] = math.floor(0.5 * 32767), 0
+    st = In.Poll(1 / 60)
+    check("no module: half stick straight = half", math.abs(st.roll - 0.5) < 0.01 and st.pitch == 0,
+        string.format("roll %.2f pitch %.2f", st.roll, st.pitch))
+    M.analog[ANALOG_JOY_R], M.analog[ANALOG_JOY_U] = 0, 0
     M.buttons[JOYSTICK_FIRST_BUTTON] = true
     st = In.Poll(1 / 60)
     M.buttons[JOYSTICK_FIRST_BUTTON] = nil
@@ -487,6 +625,14 @@ do
     FPV.Config.data.input = legacy
     st = In.Poll(1 / 60)
     check("old 'I'm using a gamepad' setting becomes the Gamepad input source", legacy.backend == "gamepad" and st.backend == "gamepad", legacy.backend)
+    local old = FPV.Config.Defaults().input
+    old.backend = "gamepad"
+    old.gamepad.expo, old.deadband = 0.35, 0.06
+    FPV.Config.data.input = old
+    st = In.Poll(1 / 60)
+    check("v0.7.2 gamepad settings: old deadband/expo defaults cleared, range relearned",
+        old.deadband == 0 and old.gamepad.expo == 0 and old.cal[1].max == 1 and old.gamepad.rangeVer == 2,
+        string.format("db %s expo %s max %.2f", tostring(old.deadband), tostring(old.gamepad.expo), old.cal[1].max))
     M.analog, M.buttons = {}, {}
     FPV.Config.data = FPV.Config.Defaults()
 end
@@ -632,8 +778,10 @@ do
     check("gamepad: sticks centred = idle", st.ok and st.thr == 0 and st.roll == 0 and not st.arm, string.format("thr %.2f", st.thr))
     ax[2] = -1; ax[4] = 1; ax[5] = -0.5
     st = In.Poll(1 / 60)
-    check("gamepad: left up = throttle, right stick = roll/pitch", st.thr > 0.99 and st.roll > 0.99 and st.pitch > 0.05 and st.pitch < 0.4,
-        string.format("thr %.2f roll %.2f pitch %.2f (expo)", st.thr, st.roll, st.pitch))
+    check("gamepad: left up = throttle, right stick = roll/pitch", st.thr > 0.99 and st.roll > 0.99 and math.abs(st.pitch - 0.5 * math.sqrt(1.25)) < 0.01,
+        string.format("thr %.2f roll %.2f pitch %.2f", st.thr, st.roll, st.pitch))
+    check("gamepad: no deadband and no expo by default", (ic.deadband or 0) == 0 and (ic.gamepad.expo or 0) == 0,
+        string.format("db %s expo %s", tostring(ic.deadband), tostring(ic.gamepad.expo)))
     btn = 1; st = In.Poll(1 / 60); local a1 = st.arm
     btn = 0; st = In.Poll(1 / 60); local a2 = st.arm
     btn = 1; st = In.Poll(1 / 60); btn = 0; st = In.Poll(1 / 60); local a3 = st.arm
@@ -805,7 +953,7 @@ do
     check("video tab: asides + notes gone", not all:find("Camera uptilt (deg)", 1, true) and all:find("Camera uptilt", 1, true) ~= nil, "")
     check("quad tab: trimmed", not all:find("652 g", 1, true) and not all:find("applies on R", 1, true) and not all:find("blade-element props", 1, true)
         and not all:find("crashflip_expo)", 1, true) and not all:find("R (reset) replaces", 1, true) and all:find("Crash flip expo", 1, true) ~= nil, "")
-    check("about: open beta", all:find("open beta", 1, true) ~= nil, "")
+    check("about: open alpha", all:find("open alpha", 1, true) ~= nil, "")
 end
 
 do

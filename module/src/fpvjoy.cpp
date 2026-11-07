@@ -1,6 +1,7 @@
 #include "GarrysMod/Lua/Interface.h"
 #include "fpvhid.h"
 #include "fpvmusic.h"
+#include "fpvxinput.h"
 
 #ifdef FPVJOY_FREESTANDING
 extern "C" {
@@ -139,7 +140,7 @@ static bool ReadPos(int id, JOYINFOEX* ji, MMRESULT* err)
 
 LUA_FUNCTION(fj_Version)
 {
-    LUA->PushString("2.1.0 hid+winmm+music");
+    LUA->PushString("2.2.0 hid+winmm+xinput+music");
     return 1;
 }
 
@@ -182,6 +183,24 @@ LUA_FUNCTION(fj_HidRead)
     LUA->PushNumber((double)lo);
     LUA->PushNumber((double)hi);
     LUA->PushNumber((double)reports);
+    for (int a = 0; a < 8; a++) LUA->PushNumber(axes[a]);
+    return 12;
+}
+
+LUA_FUNCTION(fj_XInputRead)
+{
+    int slot = (int)LUA->CheckNumber(1);
+    double axes[8];
+    unsigned int buttons = 0;
+    unsigned long packet = 0;
+    if (!FpvXInput_Read(slot, axes, 8, &buttons, &packet)) {
+        LUA->PushBool(false);
+        return 1;
+    }
+    LUA->PushBool(true);
+    LUA->PushNumber((double)buttons);
+    LUA->PushNumber(0.0);
+    LUA->PushNumber((double)packet);
     for (int a = 0; a < 8; a++) LUA->PushNumber(axes[a]);
     return 12;
 }
@@ -304,6 +323,7 @@ GMOD_MODULE_OPEN()
     SetFn(LUA, "HidScan", fj_HidScan);
     SetFn(LUA, "HidInfo", fj_HidInfo);
     SetFn(LUA, "HidRead", fj_HidRead);
+    SetFn(LUA, "XInputRead", fj_XInputRead);
     SetFn(LUA, "MusicPickFolder", fj_MusicPickFolder);
     SetFn(LUA, "MusicImport", fj_MusicImport);
     SetFn(LUA, "MusicStatus", fj_MusicStatus);

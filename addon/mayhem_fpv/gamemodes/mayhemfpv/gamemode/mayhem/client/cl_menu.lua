@@ -199,6 +199,8 @@ local function buildLive(parent)
         local status
         if st.backend == "keyboard" then
             status = "Keyboard: W/S pitch, A/D roll, Left/Right yaw, Up/Down throttle, Space arm, Shift cut"
+        elseif st.path == "gamepad" then
+            status = st.ok and "Gamepad OK" or "No gamepad: move a stick. Still nothing? Turn the pad on and restart Garry's Mod"
         elseif st.ok then
             status = st.path == "winmm" and "Radio OK - old module, 6 channels only: install the new gmcl_fpvjoy_win64.dll" or "Radio OK"
         else
@@ -218,27 +220,21 @@ for i = 1, 8 do AXIS_CHOICES[i] = { "CH" .. i, i } end
 function M.BuildGamepad(root, ic)
     local gp = ic.gamepad
     header(root, "Gamepad")
-    local r1 = row(root)
-    rowLabel(r1, "Layout", 140)
-    combo(r1, { { "Xbox / XInput", "xbox" }, { "PlayStation", "playstation" } }, gp.layout or "xbox", function(v) gp.layout = v end, 200)
+    local function apply()
+        gp.applied = nil
+        FPV.Input.Poll(0)
+        FPV.Config.Save()
+        M.Reopen("Radio")
+    end
     local r2 = row(root)
     rowLabel(r2, "Throttle", 140)
-    local thrChoice = (gp.throttle == "full") and "full" or "up"
-    M.gpThrottle = M.gpThrottle or thrChoice
     combo(r2, {
         { "Left stick up (let go = idle)", "up" },
         { "Left stick, full travel (centre = 50%)", "full" },
         { "Right trigger", "trigger" },
-    }, M.gpThrottle, function(v) M.gpThrottle = v end, 300)
-    local r3 = row(root, 30)
-    button(r3, "Set up gamepad", function()
-        FPV.Input.ApplyGamepad(ic, gp.layout or "xbox", M.gpThrottle or "up")
-        FPV.Config.Save()
-        M.Reopen("Radio")
-    end, 160)
-    slider(root, "Stick expo (gamepad)", 0, 0.9, 2, gp.expo or 0.35, function(v) gp.expo = v end)
-    note(root, "Left stick: throttle + yaw, right stick: roll + pitch. A / Cross arms (press to toggle), B / Circle turtle mode, "
-        .. "Back / Share resets. Other pads: use the calibration wizard and Detect.")
+    }, gp.thrChoice or "up", function(v) gp.thrChoice = v; apply() end, 300)
+    slider(root, "Deadband", 0, 0.2, 3, ic.deadband or 0, function(v) ic.deadband = v end)
+    slider(root, "Stick expo", 0, 0.9, 2, gp.expo or 0, function(v) gp.expo = v end)
 end
 
 function M.BuildRadio(parent)
@@ -292,10 +288,17 @@ function M.BuildRadio(parent)
         local b = button(mr, "Get the radio module", function() if url ~= "" then gui.OpenURL(url) end end, 200)
         b:SetEnabled(url ~= "")
     end
-    if FPV.Input.padNeedsRestart and src == "gamepad" then
+    if src == "gamepad" then FPV.Input.Poll(0) end
+    if FPV.Input.padNeedsRestart and src == "gamepad" and FPV.Input.state.padPath == "gmod" then
         local w = note(root, "Restart Garry's Mod once so it can find your gamepad.")
         w:SetTextColor(BAD)
     end
+    if src == "gamepad" and not FPV.Input.moduleLoaded then
+        note(root, "Garry's Mod looks for gamepads only when it starts: turn the pad on before launching the game. "
+            .. "With the RC module installed, gamepads can be plugged in at any time.")
+    end
+
+    if src == "gamepad" then M.BuildGamepad(root, ic) end
 
     buildLive(root)
 
@@ -325,6 +328,9 @@ function M.BuildRadio(parent)
         c:Dock(LEFT)
         c:DockMargin(4, 5, 0, 0)
         c.OnChange = function(_, v) m.inv = v; changed() end
+    end
+    if src == "auto" then
+        slider(root, "Deadband", 0, 0.2, 3, ic.deadband or 0, function(v) ic.deadband = v end)
     end
 
     local function switchRow(title, sw, allowNone)
@@ -383,10 +389,6 @@ function M.BuildRadio(parent)
     switchRow("Turtle mode / crash flip (optional): turn on while disarmed, then arm", ic.turtle, true)
     switchRow("Reset to launch point (optional switch)", ic.reset, true)
 
-    header(root, "Sticks")
-    slider(root, "Deadband (roll/pitch/yaw)", 0, 0.2, 3, ic.deadband or 0, function(v) ic.deadband = v end)
-
-    if src == "gamepad" then M.BuildGamepad(root, ic) end
     M.plain = false
     return root
 end
@@ -410,6 +412,7 @@ function M.OpenWizard()
     for i = 1, 8 do mins[i], maxs[i] = 99, -99 end
     local base
     local result = { map = {}, used = {} }
+    local pressSeen, prevButtons = 0, 0
 
     local steps = {
         { text = "1/7  Center the roll, pitch and yaw stick, put THROTTLE fully DOWN and the ARM switch OFF.\nThen click Next." },
@@ -446,7 +449,7 @@ function M.OpenWizard()
         for i = 1, 8 do
             drawBar(70, 10 + (i - 1) * 22, pw - 140, 16, st.raw[i] or 0, "CH" .. i, true)
         end
-        draw.SimpleText(st.ok and "radio OK" or "NO RADIO DATA", "DermaDefaultBold", 10, ph - 20, st.ok and OK or BAD)
+        draw.SimpleText(st.ok and (st.path == "gamepad" and "gamepad OK" or "radio OK") or (st.path == "gamepad" and "NO GAMEPAD: move a stick" or "NO RADIO DATA"), "DermaDefaultBold", 10, ph - 20, st.ok and OK or BAD)
     end
     local baseThinkW = w.Think
     w.Think = function(self)
@@ -459,6 +462,14 @@ function M.OpenWizard()
                 if v < mins[i] then mins[i] = v end
                 if v > maxs[i] then maxs[i] = v end
             end
+        end
+        if base and steps[idx] and steps[idx].key == "arm" then
+            local b = st.buttons or 0
+            pressSeen = bit.bor(pressSeen, bit.band(b, bit.bnot(prevButtons)))
+            prevButtons = b
+        else
+            prevButtons = st.buttons or 0
+            pressSeen = 0
         end
     end
 
@@ -484,7 +495,11 @@ function M.OpenWizard()
         local step = steps[idx]
         local cur = snap()
         if idx == 1 then
-            if not FPV.Input.state.ok then err:SetText("No radio data. Check the device in the Radio tab.") return end
+            if not FPV.Input.state.ok then
+                err:SetText(FPV.Input.state.path == "gamepad" and "No gamepad data: move a stick. Nothing? Turn the pad on and restart Garry's Mod."
+                    or "No radio data. Check the device in the Radio tab.")
+                return
+            end
             base = cur
             for i = 1, 8 do mins[i], maxs[i] = cur[i], cur[i] end
         elseif step.key == "arm" then
@@ -496,11 +511,23 @@ function M.OpenWizard()
                 result.arm = { kind = "axis", index = ax, inv = inv, threshold = (b0 + b1) * 0.5 }
             else
                 local diff = bit.bxor(cur.buttons, base.buttons)
-                if diff == 0 then err:SetText("No switch change detected. Flip ARM on (or off and on) and try again.") return end
+                local pad = ic.backend == "gamepad"
+                if diff == 0 or pad then
+                    local pressed = bit.bor(pressSeen, bit.band(cur.buttons, bit.bnot(base.buttons)))
+                    if pressed ~= 0 then diff = pressed end
+                end
+                if diff == 0 then err:SetText("No switch change detected. Flip ARM on (or press the arm button) and try again.") return end
                 local bitIdx = 1
                 while bit.band(diff, bit.lshift(1, bitIdx - 1)) == 0 and bitIdx < 32 do bitIdx = bitIdx + 1 end
-                local pressedNow = bit.band(cur.buttons, bit.lshift(1, bitIdx - 1)) ~= 0
-                result.arm = { kind = "button", index = bitIdx, inv = not pressedNow, threshold = 0.3 }
+                local mask = bit.lshift(1, bitIdx - 1)
+                local pressedNow = bit.band(cur.buttons, mask) ~= 0
+                local wasDown = bit.band(base.buttons, mask) ~= 0
+                local momentary = pad or (not pressedNow and not wasDown)
+                if momentary then
+                    result.arm = { kind = "button", index = bitIdx, inv = false, threshold = 0.3, toggle = true }
+                else
+                    result.arm = { kind = "button", index = bitIdx, inv = not pressedNow, threshold = 0.3, toggle = false }
+                end
             end
         elseif step.key then
             local ax, d = detectAxis(cur)
@@ -509,9 +536,11 @@ function M.OpenWizard()
             result.map[step.key] = { axis = ax, inv = d < 0 }
         elseif idx == #steps then
             for k, v in pairs(result.map) do ic.map[k] = v end
+            ic.gamepad.trigger = nil
             if result.arm then
-                ic.arm.kind, ic.arm.index, ic.arm.inv, ic.arm.threshold =
-                    result.arm.kind, result.arm.index, result.arm.inv, result.arm.threshold
+                ic.arm.kind, ic.arm.index, ic.arm.inv, ic.arm.threshold, ic.arm.toggle =
+                    result.arm.kind, result.arm.index, result.arm.inv, result.arm.threshold, result.arm.toggle
+                FPV.Input.ResetKeyboard()
             end
             for i = 1, 8 do
                 local c = ic.cal[i]
@@ -1173,7 +1202,7 @@ function M.BuildAbout(parent)
         end
     end
     local v = vgui.Create("DLabel", root)
-    v:SetText("v" .. FPV.Version .. "  ·  open beta")
+    v:SetText("v" .. FPV.Version .. "  ·  open alpha")
     v:SetFont("MayhemUI")
     v:SetTextColor(UI.dim)
     v:SetContentAlignment(5)

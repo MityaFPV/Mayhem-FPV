@@ -28,7 +28,7 @@ function C.Defaults()
             camSw = { kind = "none", index = 4, inv = false, threshold = 0.3 },
             gamepad = {
                 throttle = "up",
-                expo = 0.35,
+                expo = 0,
                 layout = "xbox",
             },
             deadband = 0.0,

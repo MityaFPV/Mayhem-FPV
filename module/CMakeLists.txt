@@ -9,7 +9,7 @@ if(NOT EXISTS ${GMB_DIR}/include/GarrysMod/Lua/Interface.h)
     execute_process(COMMAND ${GIT_EXECUTABLE} -C ${GMB_DIR} checkout ${GMB_COMMIT})
 endif()
 
-add_library(fpvjoy SHARED src/fpvjoy.cpp src/fpvhid.cpp src/fpvmusic.cpp)
+add_library(fpvjoy SHARED src/fpvjoy.cpp src/fpvhid.cpp src/fpvmusic.cpp src/fpvxinput.cpp)
 target_include_directories(fpvjoy PRIVATE src ${GMB_DIR}/include)
 target_compile_features(fpvjoy PRIVATE cxx_std_17)
 target_link_libraries(fpvjoy PRIVATE winmm hid setupapi shell32 ole32 user32)

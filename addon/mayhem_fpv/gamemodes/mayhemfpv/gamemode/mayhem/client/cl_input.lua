@@ -46,9 +46,25 @@ function In.LoadModule()
     return In.moduleLoaded
 end
 
+local XINPUT_BASE = 100
+
+local function addXInput()
+    if not fpvjoy.XInputRead then return end
+    for slot = 0, 3 do
+        if fpvjoy.XInputRead(slot) then
+            In.devices[#In.devices + 1] = {
+                id = XINPUT_BASE + slot, name = "XInput controller " .. (slot + 1),
+                vid = 0x045E, pid = 0, axes = 7, buttons = 14, edgetx = false, xinput = true,
+                key = "XINPUT:" .. slot,
+            }
+        end
+    end
+end
+
 function In.RefreshDevices()
     In.devices = {}
     if not In.moduleLoaded then return In.devices end
+    addXInput()
     if In.hid then
         local n = fpvjoy.HidScan() or 0
         for id = 0, n - 1 do
@@ -86,12 +102,12 @@ function In.ActiveDevice()
     local pad = ic.backend == "gamepad"
     local first, edge, other
     for _, d in ipairs(In.devices) do
-        if want and want ~= "" and d.key == want then return d.id end
+        if want and want ~= "" and d.key == want and not (pad and d.edgetx) then return d.id end
         if d.edgetx and not edge then edge = d.id end
         if not d.edgetx and not other then other = d.id end
         if not first then first = d.id end
     end
-    if pad then return other or first end
+    if pad then return other end
     return edge or first
 end
 
@@ -116,18 +132,33 @@ local function calAxis(cfg, i, centered)
     return d > 1e-3 and clamp((v - c.mid) / d, -1, 1) or 0
 end
 
-local function stick(cfg, m, centered)
+local function axisValue(cfg, m, centered)
     if not m or not m.axis or m.axis < 1 or m.axis > NAXES then return 0 end
     local v = calAxis(cfg, m.axis, centered)
     if m.inv then v = -v end
-    if centered then
-        local db = cfg.deadband or 0
-        if db > 0 then
-            local a = math.abs(v)
-            if a < db then v = 0 else v = (v > 0 and 1 or -1) * (a - db) / (1 - db) end
-        end
-    end
     return v
+end
+
+local function deadband(cfg, v)
+    local db = cfg.deadband or 0
+    if db <= 0 then return v end
+    local a = math.abs(v)
+    if a < db then return 0 end
+    return (v > 0 and 1 or -1) * (a - db) / (1 - db)
+end
+
+local function stick(cfg, m, centered)
+    local v = axisValue(cfg, m, centered)
+    if centered then v = deadband(cfg, v) end
+    return v
+end
+
+function In.SquareStick(x, y)
+    local ax, ay = math.abs(x), math.abs(y)
+    local mx = math.max(ax, ay)
+    if mx < 1e-6 then return 0, 0 end
+    local k = math.sqrt(x * x + y * y) / mx
+    return clamp(x * k, -1, 1), clamp(y * k, -1, 1)
 end
 
 local toggles = setmetatable({}, { __mode = "k" })
@@ -200,17 +231,83 @@ local function readGamepad(st)
         if input.IsButtonDown((JOYSTICK_FIRST_BUTTON or 114) + i) then b = bit.bor(b, bit.lshift(1, i)) end
     end
     st.buttons, st.buttonsHi = b, 0
+    if not In.padSeen then
+        if b ~= 0 then In.padSeen = true end
+        for i = 1, NAXES do
+            if math.abs(raw[i]) > 0.02 then In.padSeen = true end
+        end
+    end
 end
 
-function In.ApplyGamepad(ic, layout, throttle)
-    local set = In.LoadModule() and In.GAMEPADS or In.GAMEPADS_GMOD
+function In.ResetPadRange(ic)
+    for i = 1, NAXES do ic.cal[i] = { min = -1, mid = 0, max = 1 } end
+    ic.gamepad.rangeVer = 2
+end
+
+local function presetSet(path)
+    return (path == "hid" or path == "xinput") and In.GAMEPADS or In.GAMEPADS_GMOD
+end
+
+local function padTrigger(cfg)
+    local gp = cfg.gamepad
+    if gp.trigger ~= nil then return gp.trigger end
+    local set = presetSet(gp.path)
+    local L = set[gp.layout or "xbox"] or set.xbox
+    gp.trigger = cfg.map.thr ~= nil and cfg.map.thr.axis == L.trigThr.axis
+    return gp.trigger
+end
+
+local SONY_VID, MS_VID = 0x054C, 0x045E
+
+function In.PadLayout(ic, dev)
+    if dev and dev.vid == SONY_VID then return "playstation" end
+    if dev and dev.vid == MS_VID then return "xbox" end
+    return ic.gamepad.layout or "xbox"
+end
+
+function In.PadKey(ic, path, dev)
+    return path .. ":" .. In.PadLayout(ic, dev) .. ":" .. (ic.gamepad.thrChoice or "up")
+end
+
+local padRescanAt = 0
+function In.PadDevice()
+    local id = In.ActiveDevice()
+    if id ~= nil then
+        for _, d in ipairs(In.devices) do
+            if d.id == id then return id, d end
+        end
+    end
+    local now = SysTime()
+    if now > padRescanAt then
+        padRescanAt = now + 3
+        In.RefreshDevices()
+        id = In.ActiveDevice()
+        for _, d in ipairs(In.devices) do
+            if d.id == id then return id, d end
+        end
+    end
+    return nil
+end
+
+function In.ApplyGamepad(ic, layout, throttle, path)
+    if path == nil then
+        path = "gmod"
+        if In.LoadModule() then
+            local id, d = In.PadDevice()
+            if id ~= nil then path = (d and d.xinput) and "xinput" or (In.hid and "hid" or "winmm") end
+        end
+    end
+    local set = presetSet(path)
     local L = set[layout] or set.xbox
     local gp = ic.gamepad
     gp.layout = layout
+    gp.thrChoice = throttle
+    gp.path = path
     ic.backend = "gamepad"
     ic.map.yaw = { axis = L.yaw.axis, inv = L.yaw.inv }
     ic.map.roll = { axis = L.roll.axis, inv = L.roll.inv }
     ic.map.pitch = { axis = L.pitch.axis, inv = L.pitch.inv }
+    gp.trigger = throttle == "trigger"
     if throttle == "trigger" then
         ic.map.thr = { axis = L.trigThr.axis, inv = L.trigThr.inv }
         gp.throttle = L.trigThr.mode
@@ -218,12 +315,11 @@ function In.ApplyGamepad(ic, layout, throttle)
         ic.map.thr = { axis = L.stickThr.axis, inv = L.stickThr.inv }
         gp.throttle = throttle == "full" and "full" or "up"
     end
-    for i = 1, NAXES do ic.cal[i] = { min = -1, mid = 0, max = 1 } end
+    In.ResetPadRange(ic)
     ic.arm = { kind = "button", index = L.arm, inv = false, threshold = 0.3, toggle = true }
     ic.turtle = { kind = "button", index = L.turtle, inv = false, threshold = 0.3, toggle = true }
     ic.camSw = { kind = "button", index = L.cam, inv = false, threshold = 0.3 }
     ic.reset = { kind = "button", index = L.reset, inv = false, threshold = 0.3 }
-    ic.deadband = math.max(ic.deadband or 0, 0.06)
     ic.calibrated, ic.needsRecal = true, false
 end
 
@@ -295,8 +391,26 @@ function In.Poll(dt)
         cfg.gamepad.enabled = nil
     end
     local backend = cfg.backend
+    local padId, padDev
     if backend == "gamepad" then
-        backend = In.LoadModule() and "fpvjoy" or "gamepad"
+        if In.LoadModule() then padId, padDev = In.PadDevice() end
+        backend = padId ~= nil and "fpvjoy" or "gamepad"
+        local path = "gmod"
+        if padId ~= nil then path = (padDev and padDev.xinput) and "xinput" or (In.hid and "hid" or "winmm") end
+        local gp = cfg.gamepad
+        if (gp.rangeVer or 0) < 2 then
+            if gp.expo == 0.35 then gp.expo = 0 end
+            if cfg.deadband == 0.06 then cfg.deadband = 0 end
+            In.ResetPadRange(cfg)
+            gp.applied = nil
+        end
+        if gp.applied ~= In.PadKey(cfg, path, padDev) then
+            In.ApplyGamepad(cfg, In.PadLayout(cfg, padDev), gp.thrChoice or "up", path)
+            gp.applied = In.PadKey(cfg, path, padDev)
+            FPV.Config.SaveSoon()
+        end
+        st.padName = padDev and padDev.name or nil
+        st.padPath = path
     elseif backend ~= "keyboard" then
         backend = In.LoadModule() and "fpvjoy" or "keyboard"
     end
@@ -309,21 +423,27 @@ function In.Poll(dt)
 
     local raw = st.raw
     st.path = (backend == "fpvjoy") and (In.hid and "hid" or "winmm") or backend
+    if backend == "fpvjoy" and padId ~= nil and padId >= XINPUT_BASE then st.path = "xinput" end
     if backend == "gamepad" then
         In.EnableGamepad()
         readGamepad(st)
-        st.ok = true
+        st.ok = In.padSeen == true
     elseif backend == "fpvjoy" then
         local now = SysTime()
-        local id = In.ActiveDevice()
+        local id = padId
+        if id == nil then id = In.ActiveDevice() end
         if id == nil then
             st.ok = false
             if now > retryAt then retryAt = now + 2; In.RefreshDevices() end
         elseif st.ok or now > retryAt then
             local ok
-            if In.hid then
+            if id >= XINPUT_BASE or In.hid then
                 local lo, hi, reps, a1, a2, a3, a4, a5, a6, a7, a8
-                ok, lo, hi, reps, a1, a2, a3, a4, a5, a6, a7, a8 = fpvjoy.HidRead(id)
+                if id >= XINPUT_BASE then
+                    ok, lo, hi, reps, a1, a2, a3, a4, a5, a6, a7, a8 = fpvjoy.XInputRead(id - XINPUT_BASE)
+                else
+                    ok, lo, hi, reps, a1, a2, a3, a4, a5, a6, a7, a8 = fpvjoy.HidRead(id)
+                end
                 if ok then
                     raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7], raw[8] = a1, a2, a3, a4, a5, a6, a7, a8
                     st.buttons, st.buttonsHi = lo or 0, hi or 0
@@ -353,13 +473,15 @@ function In.Poll(dt)
     local m = cfg.map
     local gp = cfg.gamepad
     if gp and cfg.backend == "gamepad" then
-        local t = stick(cfg, m.thr, true)
+        local yaw, t = axisValue(cfg, m.yaw, true), axisValue(cfg, m.thr, true)
+        if not padTrigger(cfg) then yaw, t = In.SquareStick(yaw, t) end
+        local roll, pitch = In.SquareStick(axisValue(cfg, m.roll, true), axisValue(cfg, m.pitch, true))
         if gp.throttle == "full" then st.thr = (t + 1) * 0.5 else st.thr = math.max(0, t) end
         local e = gp.expo or 0
         local function ex(v) return v * (1 - e) + v * v * v * e end
-        st.roll = ex(stick(cfg, m.roll, true))
-        st.pitch = ex(stick(cfg, m.pitch, true))
-        st.yaw = ex(stick(cfg, m.yaw, true))
+        st.roll = ex(deadband(cfg, roll))
+        st.pitch = ex(deadband(cfg, pitch))
+        st.yaw = ex(deadband(cfg, yaw))
     else
         st.thr = (stick(cfg, m.thr, false) + 1) * 0.5
         st.roll = stick(cfg, m.roll, true)

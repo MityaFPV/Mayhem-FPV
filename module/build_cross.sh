@@ -8,7 +8,7 @@ if [ ! -f "$GMB/include/GarrysMod/Lua/Interface.h" ]; then
 fi
 mkdir -p build && cd build
 printf 'LIBRARY winmm.dll\nEXPORTS\njoyGetNumDevs\njoyGetDevCapsW\njoyGetPosEx\njoyConfigChanged\n' > winmm.def
-printf 'LIBRARY kernel32.dll\nEXPORTS\nWideCharToMultiByte\nMultiByteToWideChar\nCreateFileW\nReadFile\nWriteFile\nGetOverlappedResult\nCancelIo\nCloseHandle\nCreateEventW\nResetEvent\nGetLastError\nFindFirstFileW\nFindNextFileW\nFindClose\nCopyFileW\nCreateDirectoryW\nDeleteFileW\nGetFileAttributesW\nGetModuleFileNameW\nGetModuleHandleExW\nCreateThread\n' > kernel32.def
+printf 'LIBRARY kernel32.dll\nEXPORTS\nWideCharToMultiByte\nMultiByteToWideChar\nCreateFileW\nReadFile\nWriteFile\nGetOverlappedResult\nCancelIo\nCloseHandle\nCreateEventW\nResetEvent\nGetLastError\nFindFirstFileW\nFindNextFileW\nFindClose\nCopyFileW\nCreateDirectoryW\nDeleteFileW\nGetFileAttributesW\nGetModuleFileNameW\nGetModuleHandleExW\nCreateThread\nLoadLibraryW\nGetProcAddress\n' > kernel32.def
 printf 'LIBRARY user32.dll\nEXPORTS\nGetForegroundWindow\n' > user32.def
 printf 'LIBRARY shell32.dll\nEXPORTS\nSHBrowseForFolderW\nSHGetPathFromIDListW\n' > shell32.def
 printf 'LIBRARY ole32.dll\nEXPORTS\nCoTaskMemFree\nCoInitializeEx\n' > ole32.def
@@ -19,5 +19,6 @@ FLAGS="--target=x86_64-pc-windows-msvc -std=c++17 -O2 -ffreestanding -fno-except
 clang++ $FLAGS -c ../src/fpvjoy.cpp -o fpvjoy.obj
 clang++ $FLAGS -c ../src/fpvhid.cpp -o fpvhid.obj
 clang++ $FLAGS -c ../src/fpvmusic.cpp -o fpvmusic.obj
-lld-link /dll /noentry /nodefaultlib /machine:x64 /out:gmcl_fpvjoy_win64.dll fpvjoy.obj fpvhid.obj fpvmusic.obj winmm.lib kernel32.lib hid.lib setupapi.lib user32.lib shell32.lib ole32.lib
+clang++ $FLAGS -c ../src/fpvxinput.cpp -o fpvxinput.obj
+lld-link /dll /noentry /nodefaultlib /machine:x64 /out:gmcl_fpvjoy_win64.dll fpvjoy.obj fpvhid.obj fpvmusic.obj fpvxinput.obj winmm.lib kernel32.lib hid.lib setupapi.lib user32.lib shell32.lib ole32.lib
 echo "built build/gmcl_fpvjoy_win64.dll"

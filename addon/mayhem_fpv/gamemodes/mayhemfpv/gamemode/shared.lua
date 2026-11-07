@@ -8,7 +8,7 @@ DeriveGamemode("base")
 
 MayhemFPV = MayhemFPV or {}
 local FPV = MayhemFPV
-FPV.Version = "0.7.2"
+FPV.Version = "0.7.3"
 
 FPV.MODULE_URL = "https://github.com/MityaFPV/Mayhem-FPV/releases/latest"
 FPV.Gamemode = true
