@@ -953,7 +953,7 @@ do
     check("video tab: asides + notes gone", not all:find("Camera uptilt (deg)", 1, true) and all:find("Camera uptilt", 1, true) ~= nil, "")
     check("quad tab: trimmed", not all:find("652 g", 1, true) and not all:find("applies on R", 1, true) and not all:find("blade-element props", 1, true)
         and not all:find("crashflip_expo)", 1, true) and not all:find("R (reset) replaces", 1, true) and all:find("Crash flip expo", 1, true) ~= nil, "")
-    check("about: open alpha", all:find("open alpha", 1, true) ~= nil, "")
+    check("about: public alpha", all:find("public alpha", 1, true) ~= nil, "")
 end
 
 do

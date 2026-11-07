@@ -198,9 +198,9 @@ local function buildLive(parent)
         end
         local status
         if st.backend == "keyboard" then
-            status = "Keyboard: W/S pitch, A/D roll, Left/Right yaw, Up/Down throttle, Space arm, Shift cut"
+            status = ""
         elseif st.path == "gamepad" then
-            status = st.ok and "Gamepad OK" or "No gamepad: move a stick. Still nothing? Turn the pad on and restart Garry's Mod"
+            status = st.ok and "Gamepad OK" or "No gamepad: move a stick. If nothing happened, turn the pad on and restart the game"
         elseif st.ok then
             status = st.path == "winmm" and "Radio OK - old module, 6 channels only: install the new gmcl_fpvjoy_win64.dll" or "Radio OK"
         else
@@ -235,6 +235,13 @@ function M.BuildGamepad(root, ic)
     }, gp.thrChoice or "up", function(v) gp.thrChoice = v; apply() end, 300)
     slider(root, "Deadband", 0, 0.2, 3, ic.deadband or 0, function(v) ic.deadband = v end)
     slider(root, "Stick expo", 0, 0.9, 2, gp.expo or 0, function(v) gp.expo = v end)
+    if not FPV.Input.moduleLoaded then
+        note(root, "The game has its own deadband, which can make flying with a gamepad feel rather awkward. "
+            .. "You can remove it by downloading the radio module from GitHub.")
+        local url = FPV.MODULE_URL or ""
+        local b = button(row(root, 30), "Get the radio module", function() if url ~= "" then gui.OpenURL(url) end end, 200)
+        b:SetEnabled(url ~= "")
+    end
 end
 
 function M.BuildRadio(parent)
@@ -246,7 +253,7 @@ function M.BuildRadio(parent)
     rowLabel(r1, "Input source")
     local src = (ic.backend == "keyboard" or ic.backend == "gamepad") and ic.backend or "auto"
     combo(r1, {
-        { "RC radio", "auto" },
+        { "RC controller", "auto" },
         { "Gamepad", "gamepad" },
         { "Keyboard", "keyboard" },
     }, src, function(v)
@@ -262,6 +269,8 @@ function M.BuildRadio(parent)
         modLbl:SetText("RC module loaded")
     else
         modLbl:SetText("RC module not installed")
+        modLbl:SetFont("DermaDefaultBold")
+        modLbl:SetTextColor(BAD)
     end
 
     local r2 = row(root)
@@ -290,11 +299,11 @@ function M.BuildRadio(parent)
     end
     if src == "gamepad" then FPV.Input.Poll(0) end
     if FPV.Input.padNeedsRestart and src == "gamepad" and FPV.Input.state.padPath == "gmod" then
-        local w = note(root, "Restart Garry's Mod once so it can find your gamepad.")
+        local w = note(root, "Restart the game once so it can find your gamepad.")
         w:SetTextColor(BAD)
     end
     if src == "gamepad" and not FPV.Input.moduleLoaded then
-        note(root, "Garry's Mod looks for gamepads only when it starts: turn the pad on before launching the game. "
+        note(root, "The game looks for gamepads only when it starts: turn the pad on before launching the game. "
             .. "With the RC module installed, gamepads can be plugged in at any time.")
     end
 
@@ -496,7 +505,7 @@ function M.OpenWizard()
         local cur = snap()
         if idx == 1 then
             if not FPV.Input.state.ok then
-                err:SetText(FPV.Input.state.path == "gamepad" and "No gamepad data: move a stick. Nothing? Turn the pad on and restart Garry's Mod."
+                err:SetText(FPV.Input.state.path == "gamepad" and "No gamepad data: move a stick. If nothing happened, turn the pad on and restart the game."
                     or "No radio data. Check the device in the Radio tab.")
                 return
             end
@@ -1202,7 +1211,7 @@ function M.BuildAbout(parent)
         end
     end
     local v = vgui.Create("DLabel", root)
-    v:SetText("v" .. FPV.Version .. "  ·  open alpha")
+    v:SetText("v" .. FPV.Version .. "  ·  public alpha")
     v:SetFont("MayhemUI")
     v:SetTextColor(UI.dim)
     v:SetContentAlignment(5)
@@ -1224,7 +1233,7 @@ function M.BuildAbout(parent)
         end
     end
     credit("MityaFPV", "Code, design, menu, MayhemPhys, models")
-    credit("Claude", "Code helper, troubleshooting, fpvjoy module, radio controller, rates and Betaflight firmware connection")
+    credit("Claude", "Code helper, troubleshooting, fpvjoy module, radio controller, rates and Betaflight firmware connection, sometimes copy editor")
 
     header(root, "Thanks")
     note(root, "Open-source Betaflight firmware")

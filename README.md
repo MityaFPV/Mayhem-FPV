@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center"><b>v0.7.3</b> · open alpha</p>
+<p align="center"><b>v0.7.4</b> · public alpha</p>
 
 ## FPVjoy Installation
 
@@ -16,7 +16,7 @@
 ## Credits
 
 - **MityaFPV**: code, design, menu, MayhemPhys, models, **everything**.
-- **Claude**: code helper, troubleshooting, fpvjoy module, radio controller, rates and Betaflight firmware connection. (Yes, half-vibecoded addon)
+- **Claude**: code helper, troubleshooting, fpvjoy module, radio controller, rates and Betaflight firmware connection, sometimes copy editor. (Yes, half-vibecoded addon)
 
 Thanks to the open-source [Betaflight](https://github.com/betaflight/betaflight) firmware.
 
